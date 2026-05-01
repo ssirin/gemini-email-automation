@@ -1,6 +1,6 @@
 // --- SECURITY-HARDENED CONFIGURATION ---
-// ⚠️⚠️⚠️ Store these in Apps Script → Project Settings → Script Properties
-// ⚠️⚠️⚠️ Please type GEMINI_API_ and TARGET_EMAIL in Script Properties
+// ⚠️⚠️⚠️ Store GEMINI_API_ and TARGET_EMAIL in Apps Script → Project Settings → Script Properties
+// ⚠️⚠️⚠️ Please type GEMINI_API_ and TARGET_EMAIL in Script Properties and enter their values.
 const GEMINI_API_KEY = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
 const TARGET_EMAIL_ADDRESS = PropertiesService.getScriptProperties().getProperty('TARGET_EMAIL');
 
