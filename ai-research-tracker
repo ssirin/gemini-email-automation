@@ -4,7 +4,7 @@ An automated Google Apps Script that acts as a personal research assistant. It s
 
 ## Features
 * **Automated Inbox Scanning:** Automatically fetches unread research alerts from designated senders.
-* **AI-Powered Curation:** Uses Gemini 1.5 Flash to evaluate papers against specific research interests (e.g., electricity market design, climate finance).
+* **AI-Powered Curation:** Uses Gemini models to evaluate papers against specific research interests (e.g., electricity market design, climate finance).
 * **Sequential Processing & Retry Logic:** Processes papers one by one and includes exponential backoff to handle temporary API timeouts gracefully.
 * **Strict JSON Formatting:** Forces the AI to return perfectly structured data for seamless database entry.
 * **Automated Briefings:** Sends a beautifully formatted HTML email summarizing "Top Picks" and "Worth a Look" papers, while skipping irrelevant noise.
