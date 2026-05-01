@@ -183,7 +183,7 @@ function evaluateSinglePaper(paperData) {
 
   const systemInstruction = `You are a research assistant for an energy economist. Your task is to review papers and posts released in the past 24 hours and extract the highest-signal items.
 
-THE RESEARCHER ⚠️ Revise according to your preferences
+THE RESEARCHER (Warning !⚠️ Revise according to your preferences)
 Works on:
 - Business and firm strategy
 - Innovation and energy transition
