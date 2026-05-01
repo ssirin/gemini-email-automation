@@ -47,249 +47,179 @@ To make this run automatically every day:
 7. Click **Save** and grant the necessary Google permissions when prompted.
 
 ---
+// --- SECURITY-HARDENED CONFIGURATION ---
+// Store these in Apps Script → Project Settings → Script Properties
+const GEMINI_API_KEY = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
+const TARGET_EMAIL_ADDRESS = PropertiesService.getScriptProperties().getProperty('TARGET_EMAIL');
 
-## The Code (`Code.gs`)
-```javascript
-// --- CONFIGURATION ---
-const GEMINI_API_KEY = 'PASTE_YOUR_API_KEY_HERE'; // ⚠️ Keep this private!
-const SEARCH_QUERY = '{from:@publish.ssrn.com } is:unread'; // ⚠️ Add new email list!
-const TARGET_EMAIL_ADDRESS = 'your.email@example.com'; ⚠️ Add your email!
-const GEMINI_MODEL = 'gemini-3-flash'; ⚠️  Change the model!
+const SEARCH_QUERY = 'from:publish.ssrn.com is:unread';
+const GEMINI_MODEL = 'gemini-3-flash';
 
+// --- UTILITY: BASIC HTML ESCAPING ---
+function escapeHtml(text) {
+  if (!text) return '';
+  return text.replace(/[&<>"']/g, function (match) {
+    const escapeMap = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;'
+    };
+    return escapeMap[match];
+  });
+}
+
+// --- MAIN FUNCTION ---
 function runDailySSRNTracker() {
   try {
-    const activeSpreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-    let sheet = null;
-    if (activeSpreadsheet) {
-      sheet = activeSpreadsheet.getActiveSheet();
-    } else {
-      Logger.log("⚠️ WARNING: No active Google Sheet detected. The script will send the email but cannot save data to a sheet.");
-    }
-    
-    const threads = GmailApp.search(SEARCH_QUERY, 0, 15); 
-    
-    if (threads.length === 0) {
-      Logger.log("No new emails to review today matching your query.");
-      return; 
-    }
-    
+    const sheet = SpreadsheetApp.getActiveSpreadsheet()?.getActiveSheet() || null;
+
+    const threads = GmailApp.search(SEARCH_QUERY, 0, 15);
+    if (threads.length === 0) return;
+
     let evaluatedPapers = [];
-    
+
     for (let i = 0; i < threads.length; i++) {
       const messages = threads[i].getMessages();
       const latestMessage = messages[messages.length - 1];
-      
+
       const subject = latestMessage.getSubject();
-      const body = latestMessage.getPlainBody(); 
+      let body = latestMessage.getPlainBody();
+
+      // --- SANITIZATION: TRUNCATE BODY ---
+      body = body.substring(0, 5000);
+
       const link = threads[i].getPermalink();
 
-      Logger.log(`Evaluating email ${i + 1} of ${threads.length}: ${subject}`);
-      
       const paperText = `Title: ${subject}\nAbstract: ${body}`;
       const evaluation = evaluateSinglePaper(paperText);
 
-      if (evaluation) {
+      if (evaluation && evaluation.category !== "Skip") {
         evaluation.link = link;
-        if (!evaluation.title) evaluation.title = subject;
+        evaluation.title = evaluation.title || subject;
         evaluatedPapers.push(evaluation);
       }
-      
-      threads[i].markRead(); 
+
+      threads[i].markRead();
     }
 
-    if (evaluatedPapers.length > 0) {
-      const today = new Date();
-      
-      let hasRelevantPapers = false;
-      let emailHtml = '<div style="font-family: Arial, sans-serif; line-height: 1.6; max-width: 800px;">';
-      emailHtml += '<h2>Daily Research Briefing</h2>';
-      
-      let topPicksHtml = '<h3>Top picks of the day</h3><ul>';
-      let worthLookHtml = '<h3>Worth a look</h3><ul>';
-      let hasTopPicks = false;
-      let hasWorthLook = false;
-      
-      evaluatedPapers.forEach(paper => {
-        if (paper && paper.category && paper.category !== "Skip") {
-          hasRelevantPapers = true;
-          
-          let formattedSummary = paper.hook || "";
-          if (paper.summary) formattedSummary += "\n\n" + paper.summary;
+    if (evaluatedPapers.length === 0) return;
 
-          if (sheet) {
-            sheet.appendRow([
-              today, 
-              paper.category, 
-              `${paper.title} (${paper.source || 'Unknown Source'})`, 
-              formattedSummary, 
-              paper.relevance || '', 
-              paper.link
-            ]);
-          }
+    const today = new Date();
 
-          if (paper.category === "Top Pick") {
-            hasTopPicks = true;
-            topPicksHtml += `
-              <li style="margin-bottom: 15px;">
-                <strong><a href="${paper.link}">${paper.title}</a></strong> (${paper.source || 'Unknown Source'})<br>
-                <em>${paper.hook || ''}</em><br>
-                ${paper.summary || ''}<br>
-                <strong>Why it matters:</strong> ${paper.relevance || ''}
-              </li>`;
-          } else if (paper.category === "Worth a Look") {
-            hasWorthLook = true;
-            worthLookHtml += `
-              <li style="margin-bottom: 10px;">
-                <strong><a href="${paper.link}">${paper.title}</a></strong> (${paper.source || 'Unknown Source'})<br>
-                <em>${paper.hook || ''}</em><br>
-                ${paper.summary || ''}<br>
-                <strong>Angle:</strong> ${paper.relevance || ''}
-              </li>`;
-          }
-        }
-      });
+    let emailHtml = '<div style="font-family: Arial, sans-serif; line-height: 1.6; max-width: 800px;">';
+    emailHtml += '<h2>Daily Research Briefing</h2>';
 
-      if (hasRelevantPapers) {
-        topPicksHtml += '</ul>';
-        worthLookHtml += '</ul>';
-        
-        if (hasTopPicks) emailHtml += topPicksHtml;
-        if (hasWorthLook) emailHtml += worthLookHtml;
-        emailHtml += '</div>';
+    let topPicksHtml = '<h3>Top picks of the day</h3><ul>';
+    let worthLookHtml = '<h3>Worth a look</h3><ul>';
 
-        MailApp.sendEmail({
-          to: TARGET_EMAIL_ADDRESS,
-          subject: "Daily Research Briefing",
-          htmlBody: emailHtml
-        });
-        Logger.log("Briefing sent successfully.");
-      } else {
-        Logger.log("Papers were reviewed, but all were marked as 'Skip'.");
+    let hasTopPicks = false;
+    let hasWorthLook = false;
+
+    evaluatedPapers.forEach(paper => {
+      const title = escapeHtml(paper.title);
+      const source = escapeHtml(paper.source || 'Unknown Source');
+      const hook = escapeHtml(paper.hook || '');
+      const summary = escapeHtml(paper.summary || '');
+      const relevance = escapeHtml(paper.relevance || '');
+      const link = paper.link;
+
+      if (sheet) {
+        sheet.appendRow([
+          today,
+          paper.category,
+          `${title} (${source})`,
+          `${hook}\n\n${summary}`,
+          relevance,
+          link
+        ]);
       }
-    }
 
-  } catch (error) {
-    Logger.log(`🚨 FATAL ERROR on line ${error.lineNumber}: ${error.message}`);
+      const itemHtml = `
+        <li style="margin-bottom: 12px;">
+          <strong><a href="${link}">${title}</a></strong> (${source})<br>
+          <em>${hook}</em><br>
+          ${summary}<br>
+          <strong>${paper.category === 'Top Pick' ? 'Why it matters:' : 'Angle:'}</strong> ${relevance}
+        </li>`;
+
+      if (paper.category === 'Top Pick') {
+        hasTopPicks = true;
+        topPicksHtml += itemHtml;
+      } else if (paper.category === 'Worth a Look') {
+        hasWorthLook = true;
+        worthLookHtml += itemHtml;
+      }
+    });
+
+    if (hasTopPicks) emailHtml += topPicksHtml + '</ul>';
+    if (hasWorthLook) emailHtml += worthLookHtml + '</ul>';
+
+    emailHtml += '</div>';
+
     MailApp.sendEmail({
       to: TARGET_EMAIL_ADDRESS,
-      subject: "🚨 Error: Daily Research Script Crashed",
-      body: `Your Google Apps Script encountered an unexpected error and failed to run.\n\nError Message: ${error.message}\nLine Number: ${error.lineNumber}\n\nPlease check the Apps Script editor for more details.`
+      subject: 'Daily Research Briefing',
+      htmlBody: emailHtml
+    });
+
+  } catch (error) {
+    MailApp.sendEmail({
+      to: TARGET_EMAIL_ADDRESS,
+      subject: 'Error: Research Script Failed',
+      body: 'The script failed. Check Apps Script logs for details.'
     });
   }
 }
 
+// --- AI EVALUATION FUNCTION ---
 function evaluateSinglePaper(paperData) {
-  const url = `[https://generativelanguage.googleapis.com/v1beta/models/$](https://generativelanguage.googleapis.com/v1beta/models/$){GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
 
-  const systemInstruction = `You are a research assistant for an energy economist. Your task is to review papers and posts released in the past 24 hours and extract the highest-signal items.
+  const systemInstruction = `You are a research assistant for an energy economist.
 
-THE RESEARCHER (Warning !⚠️ Revise according to your preferences)
-Works on:
-- Business and firm strategy
-- Innovation and energy transition
-- Finance and financial economics
+RULES:
+- Prioritize mechanism over description
+- Be precise and concise
+- Do not hallucinate
 
-Primary additional research areas (treat as high priority, not secondary):
-- Innovation and technology strategy of firms (clean tech adoption, R&D, diffusion, industrial policy, strategic behavior of energy and tech firms, platform/business model innovation in energy systems)
-- Business strategy and economics, mostly topics published in Strategic Management Journal and Journal of International Business Studies and similar journals
-- Corporate finance and financial analysis, especially related to energy markets
+OUTPUT:
+Return ONLY valid JSON.
 
-RULES
-- Prioritize mechanism over description. Explain how and why results arise.
-- Be specific and quantitative where possible.
-- Calibrate importance strictly. Most items are not top picks.
-- Do not infer details that are not stated.
+Top Pick:
+{"category":"Top Pick","title":"...","source":"...","hook":"...","summary":"...","relevance":"..."}
 
-OUTPUT FORMAT
-You MUST respond ONLY with a valid JSON object representing your evaluation of the provided paper.
-If it is a Top Pick:
-{
-  "category": "Top Pick", 
-  "title": "Exact Title of Paper",
-  "source": "Journal or source name",
-  "hook": "One-line 'why this matters' hook.",
-  "summary": "2–3 sentences summarizing the core contribution.",
-  "relevance": "Why it matters for my research."
-}
-If it is moderate priority:
-{
-  "category": "Worth a Look",
-  "title": "Paper Title",
-  "source": "Journal or source name",
-  "hook": "One sentence summary.",
-  "summary": "1-2 sentences summarizing the core contribution",
-  "relevance": "Indicate the angle."
-}
-If it is not relevant:
-{
-  "category": "Skip"
-}`;
+Worth a Look:
+{"category":"Worth a Look","title":"...","source":"...","hook":"...","summary":"...","relevance":"..."}
 
-  const finalPrompt = `${systemInstruction}\n\nHERE IS THE PAPER TO EVALUATE:\n${paperData}`;
+Otherwise:
+{"category":"Skip"}`;
 
   const payload = {
-    "contents": [{"parts": [{"text": finalPrompt}]}],
-    "generationConfig": {
-      "responseMimeType": "application/json" 
-    }
+    contents: [{ parts: [{ text: systemInstruction + "\n\n" + paperData }] }],
+    generationConfig: { responseMimeType: "application/json" }
   };
 
   const options = {
-    "method": "post",
-    "contentType": "application/json",
-    "payload": JSON.stringify(payload),
-    "muteHttpExceptions": true 
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
   };
 
-  const maxRetries = 3;
-  let attempt = 0;
-  let success = false;
-  let responseText = "";
-
-  while (attempt < maxRetries && !success) {
-    try {
-      const response = UrlFetchApp.fetch(url, options);
-      const responseCode = response.getResponseCode();
-
-      if (responseCode === 200) {
-        responseText = response.getContentText();
-        success = true;
-      } else if (responseCode === 429 || responseCode >= 500) {
-        attempt++;
-        const waitTime = Math.pow(2, attempt) * 1000; 
-        Utilities.sleep(waitTime);
-      } else {
-        break; 
-      }
-    } catch (e) {
-      attempt++;
-      const waitTime = Math.pow(2, attempt) * 1000;
-      Utilities.sleep(waitTime);
-    }
-  }
-
-  if (!success) {
-    return { "category": "Skip" };
-  }
-
   try {
-    let data;
-    try {
-      data = JSON.parse(responseText);
-    } catch (parseError) {
-      return { "category": "Skip" };
-    }
-    
-    if (data.error || !data.candidates || data.candidates.length === 0) {
-      return { "category": "Skip" }; 
-    }
-    
-    let text = data.candidates[0].content.parts[0].text;
-    text = text.replace(/^```(json)?|```$/gm, '').trim();
+    const response = UrlFetchApp.fetch(url, options);
+    if (response.getResponseCode() !== 200) return { category: 'Skip' };
 
-    return JSON.parse(text);
-    
+    const data = JSON.parse(response.getContentText());
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!text) return { category: 'Skip' };
+
+    return JSON.parse(text.trim());
+
   } catch (e) {
-    return { "category": "Skip" };
+    return { category: 'Skip' };
   }
 }
