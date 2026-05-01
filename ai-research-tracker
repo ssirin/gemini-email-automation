@@ -53,8 +53,8 @@ To make this run automatically every day:
 // --- CONFIGURATION ---
 const GEMINI_API_KEY = 'PASTE_YOUR_API_KEY_HERE'; // ⚠️ Keep this private!
 const SEARCH_QUERY = '{from:@publish.ssrn.com } is:unread'; // ⚠️ Add new email list!
-const TARGET_EMAIL_ADDRESS = 'your.email@example.com';
-const GEMINI_MODEL = 'gemini-3-flash'; ⚠️ Change the model
+const TARGET_EMAIL_ADDRESS = 'your.email@example.com'; ⚠️ Add your email!
+const GEMINI_MODEL = 'gemini-3-flash'; ⚠️  Change the model!
 
 function runDailySSRNTracker() {
   try {
