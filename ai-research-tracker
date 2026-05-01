@@ -1,10 +1,11 @@
 // --- SECURITY-HARDENED CONFIGURATION ---
-// Store these in Apps Script → Project Settings → Script Properties
+// ⚠️⚠️⚠️ Store these in Apps Script → Project Settings → Script Properties
+// ⚠️⚠️⚠️ Please type GEMINI_API_ and TARGET_EMAIL in Script Properties
 const GEMINI_API_KEY = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
 const TARGET_EMAIL_ADDRESS = PropertiesService.getScriptProperties().getProperty('TARGET_EMAIL');
 
-const SEARCH_QUERY = 'from:publish.ssrn.com is:unread';
-const GEMINI_MODEL = 'gemini-3-flash';
+const SEARCH_QUERY = 'from:publish.ssrn.com is:unread'; // ⚠️ Add email list to here!
+const GEMINI_MODEL = 'gemini-3-flash'; // ⚠️ Choose model!
 
 // --- UTILITY: HTML ESCAPING ---
 function escapeHtml(text) {
